@@ -66,8 +66,8 @@ while True:
     distance = read_ultrasonic_sensor()
     print(distance)
 
-    if distance < 100:
-        directional_audio = convolve_hrtf(directions[current_direction], convolve_audio, freq)
+    if distance < 10:
+        directional_audio = convolve_hrtf(directions[4], convolve_audio, freq)
         sd.play(directional_audio[:88200], freq)
         sd.wait()
         current_direction = (current_direction+1)%5
