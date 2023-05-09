@@ -4,6 +4,8 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import RPi.GPIO as GPIO
+from gpiozero import AngularServo
+import math
 
 # Get audio file to convolve
 convolve_audio_file = 'base_audio.wav'
@@ -11,17 +13,15 @@ convolve_audio, freq = sf.read(convolve_audio_file)
 
 # Constant direction arrays
 directions = ['W', 'NW', 'N', 'NE', 'E']
-angles = [0, 45, 90, 135, 180]
+angles = [90, 45, 0, -45, -90]
 
 # Initiate GPIO for ultrasonic sensor and servo motor
 trigger = 18
 echo = 24
-servo = 23
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(trigger, GPIO.OUT)
 GPIO.setup(echo, GPIO.IN)
-GPIO.setup(servo, GPIO.OUT)
-pwm = GPIO.PWM(servo, 50)
+servo = AngularServo(23, min_pulse_width=0.0006, max_pulse_width=0.0023)
 
 # Audio stream setup
 chunk = 1024
@@ -64,21 +64,23 @@ def read_ultrasonic_sensor():
     distance = (time_elapsed * 34300) / 2
     return distance
 
-# Move the servo to the appropriate angle
-def set_servo_angle(angle):
-    duty = angle / 18 + 2
-    GPIO.output(servo, True)
-    pwm.ChangeDutyCycle(duty)
+# Maps distances (5-120) to volume (0-1, exponential)    
+def select_volume(distance):
+    scaled_distance = np.interp(distance, [5, 120], [0.05, 0.9])
+    volume = math.exp(-3*scaled_distance)
+    return volume
 
 current_direction = 0
 while True:
-    set_servo_angle(angles[current_direction])
+    servo.angle = angles[current_direction]
+    time.sleep(1)
     distance = read_ultrasonic_sensor()
     print(distance)
 
-    if distance < 10:
+    if distance < 120:
         directional_audio = convolve_hrtf(directions[current_direction], convolve_audio, freq)
-        sd.play(directional_audio[:88200], freq)
+        volume = select_volume(distance)
+        sd.play(volume*directional_audio[:88200], freq)
         sd.wait()
     else:
         current_direction = (current_direction+1)%5
